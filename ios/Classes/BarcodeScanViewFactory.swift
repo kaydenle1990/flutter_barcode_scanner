@@ -59,7 +59,6 @@ class FLTBarcodeScanViewController: NSObject, FlutterPlatformView {
         switch method {
         case "setupCamera":
             scanView.requestAccessToCamera(result: result)
-//            scanView.configScanView()
         case "resume":
             scanView.resume()
             result(nil);

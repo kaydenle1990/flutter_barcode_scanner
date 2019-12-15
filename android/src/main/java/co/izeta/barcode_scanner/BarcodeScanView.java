@@ -1,19 +1,27 @@
-package co.izeta.visioncamera;
+package co.izeta.barcode_scanner;
 
 import android.Manifest;
+import android.app.Activity;
 import android.content.ContentValues;
+import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
-import android.os.Bundle;
+import android.graphics.Canvas;
 import android.provider.ContactsContract;
+import android.util.AttributeSet;
 import android.util.SparseArray;
+import android.view.LayoutInflater;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
+import android.view.View;
+import android.widget.RelativeLayout;
 import android.widget.Toast;
+import android.os.Parcelable;
 
 import androidx.annotation.NonNull;
-import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
+import androidx.core.content.PermissionChecker;
+import androidx.fragment.app.Fragment;
 
 import com.google.android.gms.vision.CameraSource;
 import com.google.android.gms.vision.Detector;
@@ -36,7 +44,9 @@ import ezvcard.property.Email;
 import ezvcard.property.Telephone;
 import ezvcard.property.Url;
 
-public class BarcodeScanActivity extends AppCompatActivity {
+import io.flutter.plugin.common.MethodChannel;
+
+public class BarcodeScanView extends RelativeLayout {
 
     private static final int NO_TYPE = -1;
     private static final String[] PHONE_TYPE_STRINGS = {"home", "work", "mobile", "fax", "pager", "main"};
@@ -81,31 +91,80 @@ public class BarcodeScanActivity extends AppCompatActivity {
             ContactsContract.CommonDataKinds.StructuredPostal.TYPE_WORK,
     };
 
+    private ScannerOverlay overlay;
 
-
-    SurfaceView surfaceView;
+    private View overlayView;
+    private SurfaceView surfaceView;
     private BarcodeDetector barcodeDetector;
     private CameraSource cameraSource;
     private static final int REQUEST_CAMERA_PERMISSION = 201;
+    Activity mActivity;
+    private boolean deAttached = false;
+    private MethodChannel.Result result;
+
+    public BarcodeScanView(Context context) {
+        super(context);
+    }
+
+    public BarcodeScanView(Context context, Activity activity) {
+        super(context);
+        this.mActivity = activity;
+    }
+
+    public BarcodeScanView(Context context, AttributeSet attrs) {
+        super(context, attrs);
+    }
+
+    public BarcodeScanView(Context context, AttributeSet attrs, int defStyleAttr) {
+        super(context, attrs, defStyleAttr);
+    }
+
+    public BarcodeScanView(Context context, AttributeSet attrs, int defStyleAttr, int defStyleRes) {
+        super(context, attrs, defStyleAttr, defStyleRes);
+    }
 
     @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_scan_barcode);
-        initComponents();
+    protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        if (surfaceView == null) {
+            initComponents();
+            initialiseDetectorsAndSources();
+        }
+    }
+
+    @Override
+    protected void onDetachedFromWindow() {
+        super.onDetachedFromWindow();
+        cameraSource.release();
+    }
+
+    public void setup(MethodChannel.Result result) {
+        this.result = result;
+    }
+
+    public void start() {
+        deAttached = false;
+    }
+
+    public void stop() {
+        deAttached = true;
     }
 
     private void initComponents() {
-        surfaceView = findViewById(R.id.surfaceView);
+        surfaceView = new SurfaceView(getContext());
+        overlayView = LayoutInflater.from(getContext()).inflate(R.layout.fragment_overlay, null);
+
+        this.addView(surfaceView);
+        this.addView(overlayView);
     }
 
     private void initialiseDetectorsAndSources() {
-        Toast.makeText(getApplicationContext(), "Barcode scanner started", Toast.LENGTH_SHORT).show();
-        barcodeDetector = new BarcodeDetector.Builder(this)
+        Toast.makeText(getContext(), "Barcode scanner started", Toast.LENGTH_SHORT).show();
+        barcodeDetector = new BarcodeDetector.Builder(getContext())
                 .setBarcodeFormats(Barcode.ALL_FORMATS)
                 .build();
 
-        cameraSource = new CameraSource.Builder(this, barcodeDetector)
+        cameraSource = new CameraSource.Builder(getContext(), barcodeDetector)
                 .setRequestedPreviewSize(1920, 1080)
                 .setAutoFocusEnabled(true) //you should add this feature
                 .build();
@@ -127,7 +186,6 @@ public class BarcodeScanActivity extends AppCompatActivity {
         barcodeDetector.setProcessor(new Detector.Processor<Barcode>() {
             @Override
             public void release() {
-                Toast.makeText(getApplicationContext(), "To prevent memory leaks barcode scanner has been stopped", Toast.LENGTH_SHORT).show();
             }
 
             @Override
@@ -142,10 +200,10 @@ public class BarcodeScanActivity extends AppCompatActivity {
 
     private void openCamera(){
         try {
-            if (ActivityCompat.checkSelfPermission(BarcodeScanActivity.this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+            if (ActivityCompat.checkSelfPermission(getContext(), Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
                 cameraSource.start(surfaceView.getHolder());
             } else {
-                ActivityCompat.requestPermissions(BarcodeScanActivity.this, new
+                ActivityCompat.requestPermissions(mActivity, new
                         String[]{Manifest.permission.CAMERA}, REQUEST_CAMERA_PERMISSION);
             }
         } catch (IOException e) {
@@ -154,42 +212,27 @@ public class BarcodeScanActivity extends AppCompatActivity {
     }
 
     private void setBarCode(final SparseArray<Barcode> barCode){
-        String intentData = barCode.valueAt(0).rawValue;
-        System.out.println("==> Raw data: " + intentData + "\n");
+        if (!deAttached) {
+            String intentData = barCode.valueAt(0).rawValue;
+            deAttached = true;
+            System.out.println("==> Raw data: " + intentData + "\n");
+            // Get V-Card information
+            if (intentData.contains("VCARD")) {
+                VCard vcard = Ezvcard.parse(intentData).first();
+                
+                // open vcard
+                showContactActivity(vcard);
 
-        // Get V-Card information
-        if (intentData.contains("VCARD")) {
-            VCard vcard = Ezvcard.parse(intentData).first();
-            // open vcard
-            showContactActivity(vcard);
-        } else {
-            Toast.makeText(this, intentData, Toast.LENGTH_LONG).show();
+                // success
+                if (this.result != null) {
+                    this.result.success(null);
+                }
+            } else {
+                if (this.result != null) {
+                    this.result.success(intentData);
+                }
+            }
         }
-        cameraSource.stop();
-    }
-
-    @Override
-    protected void onPause() {
-        super.onPause();
-        cameraSource.release();
-    }
-
-    @Override
-    protected void onResume() {
-        super.onResume();
-        initialiseDetectorsAndSources();
-    }
-
-    @Override
-    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        if(requestCode == REQUEST_CAMERA_PERMISSION && grantResults.length>0){
-            if (grantResults[0] == PackageManager.PERMISSION_DENIED)
-                finish();
-            else
-                openCamera();
-        }else
-            finish();
     }
 
     // get information to show in contact activity
@@ -245,7 +288,7 @@ public class BarcodeScanActivity extends AppCompatActivity {
                 for (AddressType type : info.getTypes()) {
                     int typeText = toAddressContractType(type.toString());
                     intent.putExtra(ContactsContract.Intents.Insert.POSTAL, info.getStreetAddressFull())
-                    .putExtra(ContactsContract.Intents.Insert.POSTAL_TYPE, typeText);
+                            .putExtra(ContactsContract.Intents.Insert.POSTAL_TYPE, typeText);
                 }
             }
         }
@@ -305,7 +348,7 @@ public class BarcodeScanActivity extends AppCompatActivity {
                 for (TelephoneType type : telephoneTypes) {
                     int rawType = toPhoneContractType(type.getValue());
                     intent.putExtra(PHONE_KEYS[x], phoneNumer)
-                        .putExtra(PHONE_TYPE_KEYS[x], rawType);
+                            .putExtra(PHONE_TYPE_KEYS[x], rawType);
                 }
             }
         }
@@ -324,7 +367,7 @@ public class BarcodeScanActivity extends AppCompatActivity {
             }
         }
 
-        startActivity(intent);
+        mActivity.startActivity(intent);
 
         /**
          *

@@ -1,4 +1,4 @@
-package co.izeta.visioncamera;
+package co.izeta.barcode_scanner;
 
 import android.content.Context;
 import android.content.res.TypedArray;
