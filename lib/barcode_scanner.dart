@@ -12,7 +12,7 @@ class BarcodeScannerController {
     _channel =  new MethodChannel('plugins.flutter.io/barcode_scanner_$id');
   }
 
-  Future<void> setupCamera() async {
+  Future<String> setupCamera() async {
     return _channel.invokeMethod('setupCamera');
   }
 

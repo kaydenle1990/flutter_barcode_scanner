@@ -225,11 +225,21 @@ public class BarcodeScanView extends RelativeLayout {
 
                 // success
                 if (this.result != null) {
-                    this.result.success(null);
+                    mActivity.runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            result.success(null);
+                        }
+                    });
                 }
             } else {
                 if (this.result != null) {
-                    this.result.success(intentData);
+                    mActivity.runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            result.success(null);
+                        }
+                    });
                 }
             }
         }

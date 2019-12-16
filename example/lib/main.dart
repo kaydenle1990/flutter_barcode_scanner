@@ -58,8 +58,11 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     );
   }
 
-  void onBarcodeScannerCreated(BarcodeScannerController controller) {
+  Future<void> onBarcodeScannerCreated(BarcodeScannerController controller) async {
     this.barcodeController = controller;
-    this.barcodeController.setupCamera();
+    final String result = await this.barcodeController.setupCamera();
+    if (result != null) {
+      print('==== QRCode Content ====\n $result\n');
+    }
   }
 }
